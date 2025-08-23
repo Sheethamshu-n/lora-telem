@@ -1,0 +1,61 @@
+#include <SoftwareSerial.h>
+
+// LoRa pins
+#define LORA_RX 10   // Arduino receives from LoRa TX
+#define LORA_TX 11   // Arduino sends to LoRa RX
+SoftwareSerial loraSerial(LORA_RX, LORA_TX);
+
+// Pixhawk TELEM pins
+#define TELEM_RX 9   // Arduino receives from Pixhawk TX
+#define TELEM_TX 8   // Arduino sends to Pixhawk RX
+SoftwareSerial pixhawkSerial(TELEM_RX, TELEM_TX);
+
+// Destination address for LoRa
+int loraAddress = 1;   // <-- change this as needed
+
+void setup() {
+  // Debug Serial
+  Serial.begin(57600);
+  while (!Serial);
+
+  // LoRa
+  loraSerial.begin(57600);
+
+  // Pixhawk TELEM
+  pixhawkSerial.begin(57600);
+
+  Serial.println("LoRa <--> Pixhawk Bridge Started");
+}
+
+void loop() {
+  // Pixhawk → LoRa
+  if (pixhawkSerial.available()) {
+    String data = "";
+    while (pixhawkSerial.available()) {
+      char c = pixhawkSerial.read();
+      data += c;
+    }
+
+    if (data.length() > 0) {
+      String atCmd = "AT+SEND=" + String(loraAddress) + "," + String(data.length()) + "," + data;
+      loraSerial.println(atCmd);
+      Serial.print("Pixhawk → LoRa: ");
+      Serial.println(atCmd);
+    }
+  }
+
+  // LoRa → Pixhawk
+  if (loraSerial.available()) {
+    String data = "";
+    while (loraSerial.available()) {
+      char c = loraSerial.read();
+      data += c;
+    }
+
+    if (data.length() > 0) {
+      pixhawkSerial.print(data);
+      Serial.print("LoRa → Pixhawk: ");
+      Serial.println(data);
+    }
+  }
+}
