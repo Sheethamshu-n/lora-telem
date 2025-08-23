@@ -1,0 +1,87 @@
+#include <SoftwareSerial.h>
+
+// LoRa pins
+#define LORA_RX 10   // Arduino receives from LoRa TX
+#define LORA_TX 11   // Arduino sends to LoRa RX
+SoftwareSerial loraSerial(LORA_RX, LORA_TX);
+
+// Pixhawk TELEM pins
+#define TELEM_RX 9   // Arduino receives from Pixhawk TX
+#define TELEM_TX 8   // Arduino sends to Pixhawk RX
+SoftwareSerial pixhawkSerial(TELEM_RX, TELEM_TX);
+
+// LoRa destination address
+int loraAddress = 1; // GCS address
+
+// MAVLink buffer
+uint8_t buffer[256];
+int bufferLen = 0;
+
+// timer
+unsigned long lastFlush = 0;
+
+void setup() {
+  Serial.begin(57600);             
+  loraSerial.begin(57600);         
+  pixhawkSerial.begin(57600);      
+
+  Serial.println("\n=== Optimized LoRa <-> Pixhawk Bridge ===");
+
+  // Suggest user config: fast LoRa parameters
+  Serial.println("⚡ Make sure LoRa is set: AT+PARAMETER=12,7,1,7");
+}
+
+void loop() {
+  // -------- Pixhawk → LoRa ----------
+  while (pixhawkSerial.available()) {
+    if (bufferLen < sizeof(buffer)) {
+      buffer[bufferLen++] = pixhawkSerial.read();
+    }
+
+    // Send when buffer nearly full
+    if (bufferLen >= 200) {
+      sendToLoRa(buffer, bufferLen);
+      bufferLen = 0;
+    }
+    lastFlush = millis();
+  }
+
+  // Flush small remaining packets after 5ms idle
+  if (bufferLen > 0 && millis() - lastFlush > 5) {
+    sendToLoRa(buffer, bufferLen);
+    bufferLen = 0;
+  }
+
+  // -------- LoRa → Pixhawk ----------
+  while (loraSerial.available()) {
+    char c = loraSerial.read();
+    pixhawkSerial.write(c);  
+    Serial.write(c);         
+  }
+
+  // -------- Manual AT passthrough ----------
+  while (Serial.available()) {
+    char c = Serial.read();
+    loraSerial.write(c);  
+  }
+}
+
+// Helper: send MAVLink data wrapped in AT+SEND
+void sendToLoRa(uint8_t *data, int len) {
+  loraSerial.print("AT+SEND=");
+  loraSerial.print(loraAddress);
+  loraSerial.print(",");
+  loraSerial.print(len);
+  loraSerial.print(",");
+
+  // raw binary
+  for (int i = 0; i < len; i++) {
+    loraSerial.write(data[i]);
+  }
+
+  loraSerial.print("\r\n");
+
+  Serial.print("Pixhawk → LoRa [");
+  Serial.print(len);
+  Serial.println(" bytes]");
+}
