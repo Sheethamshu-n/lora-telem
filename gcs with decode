@@ -1,0 +1,25 @@
+#include <SoftwareSerial.h>
+
+SoftwareSerial lora(10, 11); // RX, TX for LoRa module
+#define GCS Serial           // USB Serial to Mission Planner
+
+void setup() {
+  GCS.begin(57600);     // Mission Planner typical baud
+  lora.begin(57600);    // Set to your LoRa module baud rate
+}
+
+void loop() {
+  // Forward data from LoRa → Mission Planner
+  while (lora.available()) {
+    char c = lora.read();
+    // filter out AT responses like '+OK', 'RCV=', etc
+    if (c != '+' && c != 'R' && c != 'O' && c != 'K' && c != '=') {
+      GCS.write(c);
+    }
+  }
+
+  // Forward data from Mission Planner → LoRa
+  while (GCS.available()) {
+    lora.write(GCS.read());
+  }
+}
